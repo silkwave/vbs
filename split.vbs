@@ -7,23 +7,6 @@ Const SAMPLE_DATA_MAX_ROWS As Long = 20            ' 샘플 데이터 최대 행
 Const BUTTON_WIDTH As Single = 60                   ' 버튼 너비
 Const BUTTON_HEIGHT As Single = 30                  ' 버튼 높이
 
-Function LeftMbcs(ByVal fullStr As String, ByVal maxW As Long) As String
-    Dim resultStr As String ' 결과 문자열 변수
-    Dim halfW As Long ' 문자열의 반각 너비
-
-    ' 주어진 문자열에서 최대 너비까지 자르기
-    resultStr = Left(fullStr, maxW)
-    halfW = LenMbcs(resultStr) ' 현재 문자열의 반각 너비 계산
-    
-    ' 반각 너비가 최대 너비보다 클 때까지 반복
-    Do Until halfW <= maxW
-        resultStr = Left(resultStr, Len(resultStr) - 1) ' 문자열의 끝에서 한 글자 제거
-        halfW = LenMbcs(resultStr) ' 새로 자른 문자열의 반각 너비 계산
-    Loop
-    
-    LeftMbcs = resultStr ' 결과 반환
-End Function
-
 ' 다중 바이트 문자 길이를 반환하는 함수
 Function LenMbcs(ByVal Mesg As String) As Long
     LenMbcs = LenB(StrConv(Mesg, vbFromUnicode)) ' 입력 문자열의 길이를 바이트 단위로 반환
