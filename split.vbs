@@ -1,179 +1,141 @@
 Option Explicit
 
-' 상수 선언
-Const HEADER_ROW As Long = 1                       ' 헤더가 위치하는 행
-Const DATA_START_ROW As Long = 2                   ' 데이터 시작 행
-Const SAMPLE_DATA_MAX_ROWS As Long = 20            ' 샘플 데이터 최대 행 수
-Const BUTTON_WIDTH As Single = 60                   ' 버튼 너비
-Const BUTTON_HEIGHT As Single = 30                  ' 버튼 높이
+' 상수 정의
+Const HEADER_ROW As Long = 1
+Const DATA_START_ROW As Long = 2
+Const SAMPLE_DATA_MAX_ROWS As Long = 10 ' 테스트용 10행
+Const BUTTON_WIDTH As Single = 80
+Const BUTTON_HEIGHT As Single = 25
 
-' 다중 바이트 문자 길이를 반환하는 함수
+' 바이트 단위 문자열 길이 반환
 Function LenMbcs(ByVal Mesg As String) As Long
-    LenMbcs = LenB(StrConv(Mesg, vbFromUnicode)) ' 입력 문자열의 길이를 바이트 단위로 반환
+    LenMbcs = LenB(StrConv(Mesg, vbFromUnicode))
 End Function
 
-' 입력 문자열의 지정된 위치에서 길이에 따라 부분 문자열을 반환하는 함수
+' 바이트 단위 Mid 함수
 Function h_mid(ByVal Mesg As String, ByVal startIdx As Long, ByVal Mesglen As Long) As String
-    ' 입력 문자열을 바이트 단위로 변환 후 부분 문자열을 반환하고 다시 유니코드로 변환
-    h_mid = StrConv(MidB(StrConv(Mesg, vbFromUnicode), startIdx, Mesglen), vbUnicode)
+    Dim b() As Byte
+    b = StrConv(Mesg, vbFromUnicode)
+    ' 시작 위치가 전체 바이트 길이보다 크면 빈값 반환
+    If startIdx > UBound(b) + 1 Then
+        h_mid = ""
+    Else
+        h_mid = StrConv(MidB(b, startIdx, Mesglen), vbUnicode)
+    End If
+End Function
+
+' 바이트 단위로 문자열을 맞추고 부족하면 공백을 채우는 함수 (Pad Right)
+Function PadRightMbcs(ByVal Mesg As String, ByVal TotalLen As Long) As String
+    Dim curLen As Long
+    curLen = LenMbcs(Mesg)
+    
+    If curLen > TotalLen Then
+        ' 설정된 길이보다 길면 바이트 단위로 자름
+        PadRightMbcs = StrConv(MidB(StrConv(Mesg, vbFromUnicode), 1, TotalLen), vbUnicode)
+    Else
+        ' 부족하면 그만큼 공백(Space) 추가
+        PadRightMbcs = Mesg & Space(TotalLen - curLen)
+    End If
 End Function
 
 Sub SetBorders(rng As Range)
-    ' 지정된 범위에 테두리 설정
     With rng.Borders
         .LineStyle = xlContinuous
         .Weight = xlThin
-        .Color = RGB(0, 0, 0)
     End With
 End Sub
 
 Sub CreateSampleData()
-    Dim ws As Worksheet
-    Set ws = ActiveSheet
-    Dim dataRange As Range
-    Set dataRange = ws.Range("A1:D" & SAMPLE_DATA_MAX_ROWS)
-
-    ' 헤더 생성 및 색상 서식 지정
-    With dataRange
-        .Cells(HEADER_ROW, 1).Value = "영문명"
-        .Cells(HEADER_ROW, 2).Value = "한글명"
-        .Cells(HEADER_ROW, 3).Value = "길이"
-        .Cells(HEADER_ROW, 4).Value = "전문내용"
-        .Interior.Color = RGB(200, 200, 200) ' 회색 배경색
-        .Font.Bold = True ' 굵은 글꼴
-
-        ' 테두리 서식 지정
-        SetBorders dataRange
-
-        ' 샘플 데이터 입력
-        Dim rowIndex As Long
-        For rowIndex = DATA_START_ROW To SAMPLE_DATA_MAX_ROWS
-            With .Cells(rowIndex, 1)
-                .Value = "ENG " & rowIndex
-                .Offset(0, 1).Value = "한글 " & rowIndex
-                .Offset(0, 2).Value = 10 ' Segment Length
-                .Offset(0, 3).Value = "가나다123" ' 메시지
-                .Offset(0, 3).NumberFormat = "@" ' 텍스트 형식
-            End With
-        Next rowIndex
-    End With
-
-    ' 1행의 행 높이 설정
-    ws.Rows(HEADER_ROW).RowHeight = 30
-
-    ' 분석전문 및 조립전문 열 추가
-    Dim highlightRange As Range
-    Set highlightRange = ws.Range("E" & HEADER_ROW & ":E" & (HEADER_ROW + 1))
-
-    With highlightRange
-        .Cells(2, 1).Interior.Color = RGB(255, 192, 203) ' 분홍색
-        .Cells(3, 1).Interior.Color = RGB(255, 165, 0) ' 오렌지색
-        .Font.Bold = True ' 굵은 글꼴
-
-        ' 테두리 서식 지정
-        SetBorders highlightRange
-    End With
-
+    Dim ws As Worksheet: Set ws = ActiveSheet
+    
+    ws.Cells.Clear ' 시트 초기화
+    
+    ' 헤더 구성
+    Dim headers As Variant
+    headers = Array("영문명", "한글명", "길이(Byte)", "데이터 내용")
+    ws.Range("A1:D1").Value = headers
+    ws.Range("A1:D1").Interior.Color = RGB(240, 240, 240)
+    ws.Range("A1:D1").Font.Bold = True
+    
+    ' 샘플 데이터 채우기
+    Dim i As Long
+    For i = 0 To 4
+        ws.Cells(DATA_START_ROW + i, 1).Value = "FLD_00" & i + 1
+        ws.Cells(DATA_START_ROW + i, 2).Value = "필드_" & i + 1
+        ws.Cells(DATA_START_ROW + i, 3).Value = 10 ' 각 필드 10바이트 고정
+        ws.Cells(DATA_START_ROW + i, 4).Value = "Data" & (i + 1)
+        ws.Cells(DATA_START_ROW + i, 4).NumberFormat = "@"
+    Next i
+    
+    ' 결과창 영역 설정 (E2: 입력용, E3: 출력용)
+    ws.Range("E1").Value = "전문 입출력"
+    ws.Range("E2").Interior.Color = RGB(255, 240, 245) ' 분석용 입력창
+    ws.Range("E3").Interior.Color = RGB(255, 250, 205) ' 조립용 결과창
+    SetBorders ws.Range("A1:D6")
+    SetBorders ws.Range("E1:E3")
+    
     ' 버튼 생성
-    CreateButton ws, "전문분석기", "SplitSeg", HEADER_ROW, 5
-    CreateButton ws, "전문합치기", "MergeSeg", HEADER_ROW, 6
-
-    ' 열 너비 설정
-    ws.Columns("D").ColumnWidth = 20
-    ws.Columns("E").ColumnWidth = 20
-    ws.Columns("F").ColumnWidth = 20
-
-    ' MergeSeg 실행
-    MergeSeg
-
-    ' 조립전문 열에 값 할당
-    highlightRange.Cells(2, 1).Value = highlightRange.Cells(3, 1).Value
+    CreateButton ws, "전문분석기", "SplitSeg", 1, 6
+    CreateButton ws, "전문합치기", "MergeSeg", 1, 7
+    
+    ws.Columns("A:G").AutoFit
+    MsgBox "샘플 데이터가 생성되었습니다."
 End Sub
 
 Sub CreateButton(ws As Worksheet, btnText As String, macroName As String, topRow As Long, leftCol As Integer)
-    ' 기존 버튼 삭제
     Dim btn As Button
     For Each btn In ws.Buttons
         If btn.Caption = btnText Then btn.Delete
     Next btn
 
-    ' 버튼 생성
-    Dim newButton As Button
-    On Error Resume Next ' 오류 발생 시 코드 실행 지속
-    Set newButton = ws.Buttons.Add(ws.Cells(topRow, leftCol).Left, ws.Cells(topRow, leftCol).Top, BUTTON_WIDTH, BUTTON_HEIGHT)
-    On Error GoTo 0 ' 오류 처리 종료
-
-    If Not newButton Is Nothing Then
-        With newButton
-            .Caption = btnText
-            .OnAction = "'" & macroName & "'" ' 매크로 이름
-        End With
-    Else
-        MsgBox "버튼 생성에 실패했습니다.", vbExclamation
-    End If
+    Dim targetCell As Range: Set targetCell = ws.Cells(topRow, leftCol)
+    Set btn = ws.Buttons.Add(targetCell.Left, targetCell.Top, BUTTON_WIDTH, BUTTON_HEIGHT)
+    With btn
+        .Caption = btnText
+        .OnAction = macroName
+    End With
 End Sub
 
+' [전문분석기] : E2 셀의 전문을 필드별로 쪼개기
 Sub SplitSeg()
-    On Error GoTo ErrorHandler
-    Dim ws As Worksheet
-    Set ws = ActiveSheet
-    Dim anStr As String
-    Dim curRow As Long
-    Dim maxRow As Long
-    Dim segLen As Long
-    Dim curLen As Long
+    Dim ws As Worksheet: Set ws = ActiveSheet
+    Dim fullStr As String: fullStr = Trim(ws.Range("E2").Value)
+    Dim curRow As Long, lastRow As Long
+    Dim segLen As Long, startByte As Long: startByte = 1
 
-    anStr = Trim(ws.Cells(DATA_START_ROW, 5).Value)
-    maxRow = ws.Cells(ws.Rows.Count, 3).End(xlUp).Row
-    curLen = 1
+    If fullStr = "" Then
+        MsgBox "분석할 전문 내용이 E2 셀에 없습니다.", vbExclamation
+        Exit Sub
+    End If
 
-    ' 데이터 처리 및 서식 적용
-    For curRow = DATA_START_ROW To maxRow
+    lastRow = ws.Cells(ws.Rows.Count, 3).End(xlUp).Row
+    
+    For curRow = DATA_START_ROW To lastRow
         segLen = ws.Cells(curRow, 3).Value
-        ws.Cells(curRow, 4).NumberFormat = "@" ' 텍스트 형식
-        ws.Cells(curRow, 4).Value = h_mid(anStr, curLen, segLen)
-        curLen = curLen + segLen
+        ws.Cells(curRow, 4).Value = h_mid(fullStr, startByte, segLen)
+        startByte = startByte + segLen
     Next curRow
 
-    ' 완료 메시지
-    MsgBox "(" & ws.Name & ") 전문분석완료", , "전문분석완료/silkwave"
-
-CleanUp:
-    Exit Sub
-
-ErrorHandler:
-    MsgBox Err.Description, , "오류 번호 : " & Err.Number
-    Resume CleanUp
+    MsgBox "전문 분석이 완료되었습니다."
 End Sub
 
-
-
+' [전문합치기] : D열의 내용을 바이트 길이에 맞춰 합쳐서 E3에 출력
 Sub MergeSeg()
-    Dim ws As Worksheet
-    Dim startRow As Long
-    Dim endRow As Long
-    Dim curRow As Long
+    Dim ws As Worksheet: Set ws = ActiveSheet
+    Dim curRow As Long, lastRow As Long
     Dim segLen As Long
-    Dim comMsg As String
-    Dim msgPart As String
+    Dim resultMsg As String, cellVal As String
 
-    Set ws = ActiveSheet
-    startRow = DATA_START_ROW
-    endRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
-
-    ' 각 Segment Length에 따라 메시지를 결합
-    For curRow = startRow To endRow
+    lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+    
+    For curRow = DATA_START_ROW To lastRow
         segLen = ws.Cells(curRow, 3).Value
-        msgPart = Left(ws.Cells(curRow, 4).Value, segLen)
-        If Len(msgPart) < segLen Then
-            msgPart = msgPart & Space(segLen - LenMbcs(msgPart))
-        End If
-        comMsg = comMsg & msgPart
+        cellVal = CStr(ws.Cells(curRow, 4).Value)
+        
+        ' 바이트 길이에 맞춰 패딩 처리 후 합침
+        resultMsg = resultMsg & PadRightMbcs(cellVal, segLen)
     Next curRow
 
-    ' 결과 출력
-    ws.Cells(3, 5).Value = comMsg
-    MsgBox "(" & ws.Name & ") 전문합치기완료", , "전문합치기완료/silkwave"
+    ws.Range("E3").Value = resultMsg
+    MsgBox "전문 조립이 완료되었습니다."
 End Sub
-
-

@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KFTC 전문 분석기 / silkwave</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #0f1117;
+    --bg2:      #181c27;
+    --bg3:      #1e2436;
+    --border:   #2a3050;
+    --border2:  #3a4570;
+    --text:     #c9d1e8;
+    --text2:    #7a87a8;
+    --text3:    #4a5570;
+    --accent:   #3a7bd5;
+    --accent2:  #2a5baa;
+    --ok:       #1d9e75;
+    --ok-bg:    #0b2e20;
+    --warn:     #d4a017;
+    --warn-bg:  #2e2000;
+    --err:      #d85a30;
+    --err-bg:   #2e1000;
+    --mono:     'Courier New', Courier, monospace;
+    --radius:   6px;
+    --radius2:  10px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ── 헤더 ── */
+  header {
+    padding: 18px 24px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    background: var(--bg2);
+  }
+  header h1 {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  header span {
+    font-size: 11px;
+    color: var(--text3);
+    letter-spacing: .08em;
+  }
+
+  /* ── 레이아웃 ── */
+  main { padding: 20px 24px; max-width: 1080px; margin: 0 auto; }
+
+  .section-label {
+    font-size: 10px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-bottom: 6px;
+  }
+
+  /* ── 입력/출력 전문 ── */
+  .msg-block { margin-bottom: 18px; }
+  .msg-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start; }
+
+  textarea {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    resize: vertical;
+    transition: border-color .15s;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  textarea[readonly] { color: var(--ok); }
+
+  /* ── 버튼 ── */
+  .btn-group { display: flex; flex-direction: column; gap: 6px; }
+  button {
+    padding: 7px 14px;
+    border: 1px solid var(--border2);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background .12s, border-color .12s;
+  }
+  button:hover { background: var(--bg3); border-color: var(--accent); color: var(--accent); }
+  button.primary { background: var(--accent2); border-color: var(--accent); color: #e8f0ff; }
+  button.primary:hover { background: var(--accent); }
+  button.danger { border-color: #5a2a10; color: var(--err); }
+  button.danger:hover { background: var(--err-bg); }
+  button.small { padding: 3px 8px; font-size: 11px; }
+
+  /* ── 툴바 ── */
+  .toolbar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .toolbar .spacer { flex: 1; }
+
+  /* ── 테이블 ── */
+  .table-wrap {
+    border: 1px solid var(--border);
+    border-radius: var(--radius2);
+    overflow: hidden;
+    overflow-x: auto;
+    margin-bottom: 14px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead th {
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text3);
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    font-weight: 400;
+  }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background .08s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--bg3); }
+  tbody tr.drag-over { background: #1a2a50; }
+  tbody tr.dragging { opacity: .35; }
+
+  tbody td { padding: 5px 8px; vertical-align: middle; }
+  tbody td input[type=text], tbody td input:not([type]) {
+    width: 100%;
+    padding: 4px 6px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    transition: border-color .1s;
+  }
+  tbody td input[type=text]:focus, tbody td input:not([type]):focus {
+    border-color: var(--border2);
+    background: var(--bg2);
+    outline: none;
+  }
+  tbody td input[type=number] {
+    width: 70px;
+    padding: 4px 6px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    text-align: right;
+  }
+  tbody td input[type=number]:focus { border-color: var(--border2); background: var(--bg2); outline: none; }
+
+  .td-num { color: var(--text3); font-size: 11px; text-align: center; width: 28px; cursor: grab; }
+  .td-num:active { cursor: grabbing; }
+
+  .td-len { font-size: 11px; font-weight: 700; text-align: center; min-width: 50px; }
+  .td-len.ok   { color: var(--ok); }
+  .td-len.warn { color: var(--warn); }
+  .td-len.err  { color: var(--err); }
+  .td-len.none { color: var(--text3); }
+
+  .del-btn {
+    padding: 2px 7px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text3);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    font-family: var(--mono);
+  }
+  .del-btn:hover { border-color: var(--err); color: var(--err); background: var(--err-bg); }
+
+  /* ── 통계 카드 ── */
+  .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+  .stat {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+  }
+  .stat .lbl { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--text3); margin-bottom: 4px; }
+  .stat .val { font-size: 20px; font-weight: 700; color: var(--text); font-family: var(--mono); }
+  .stat .val.ok   { color: var(--ok); }
+  .stat .val.warn { color: var(--warn); }
+  .stat .val.err  { color: var(--err); }
+
+  /* ── 상태바 ── */
+  .status-bar {
+    padding: 8px 14px;
+    border-radius: var(--radius);
+    font-size: 12px;
+    margin-bottom: 16px;
+    display: none;
+  }
+  .status-bar.show { display: block; }
+  .status-bar.ok   { background: var(--ok-bg);   color: var(--ok);   border: 1px solid #1d5a3a; }
+  .status-bar.warn { background: var(--warn-bg);  color: var(--warn); border: 1px solid #5a4000; }
+  .status-bar.err  { background: var(--err-bg);   color: var(--err);  border: 1px solid #5a2010; }
+
+  /* ── 구분선 ── */
+  hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
+
+  /* ── 반응형 ── */
+  @media (max-width: 600px) {
+    main { padding: 14px 12px; }
+    .stat-row { grid-template-columns: 1fr 1fr; }
+    .msg-row { grid-template-columns: 1fr; }
+    .btn-group { flex-direction: row; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>KFTC 전문 분석기</h1>
+  <span>Fixed-length message parser / silkwave</span>
+</header>
+
+<main>
+
+  <!-- 입력 전문 -->
+  <div class="msg-block">
+    <div class="section-label">분석전문 (입력)</div>
+    <div class="msg-row">
+      <textarea id="inputMsg" rows="3" placeholder="분석할 전문을 붙여넣으세요 (한글 2바이트, 영문/숫자 1바이트)"></textarea>
+      <div class="btn-group">
+        <button class="primary" onclick="splitSeg()">전문분석 ↓</button>
+        <button onclick="mergeSeg()">전문합치기 ↑</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 통계 -->
+  <div class="stat-row">
+    <div class="stat"><div class="lbl">정의 합계</div><div class="val" id="statDef">0 B</div></div>
+    <div class="stat"><div class="lbl">전문 길이</div><div class="val" id="statMsg">0 B</div></div>
+    <div class="stat"><div class="lbl">검증</div><div class="val" id="statChk">—</div></div>
+  </div>
+
+  <!-- 상태바 -->
+  <div id="statusBar" class="status-bar"></div>
+
+  <!-- 필드 테이블 -->
+  <div class="toolbar">
+    <div class="section-label" style="margin:0">필드 정의</div>
+    <div class="spacer"></div>
+    <button class="small" onclick="addRow()">+ 행 추가</button>
+    <button class="small" onclick="loadSample()">샘플 로드</button>
+    <button class="small" onclick="exportCSV()">CSV 내보내기</button>
+    <button class="small danger" onclick="clearRows()">전체 삭제</button>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:28px">#</th>
+          <th style="min-width:100px">영문명</th>
+          <th style="min-width:90px">한글명</th>
+          <th style="min-width:75px;text-align:right">길이 (bytes)</th>
+          <th style="min-width:180px">전문내용</th>
+          <th style="min-width:55px;text-align:center">실제</th>
+          <th style="width:32px"></th>
+        </tr>
+      </thead>
+      <tbody id="fieldTable"></tbody>
+    </table>
+  </div>
+
+  <hr>
+
+  <!-- 조립 전문 출력 -->
+  <div class="msg-block">
+    <div class="section-label">조립전문 (출력)</div>
+    <div class="msg-row">
+      <textarea id="outputMsg" rows="3" readonly placeholder="전문합치기 결과가 여기 표시됩니다"></textarea>
+      <div class="btn-group">
+        <button onclick="copyOutput()">복사</button>
+        <button onclick="clearOutput()">초기화</button>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+/* ────────────────────────────────────────────
+   바이트 유틸리티 (한글 2바이트, 나머지 1바이트)
+   VBA h_mid / LenMbcs / MergeSeg 버그 수정 버전
+──────────────────────────────────────────── */
+
+/** 문자열의 바이트 수 반환 (EUC-KR 기준: 한글 2B, 기타 1B) */
+function lenBytes(s) {
+  let b = 0;
+  for (let i = 0; i < s.length; i++) b += s.charCodeAt(i) > 127 ? 2 : 1;
+  return b;
+}
+
+/**
+ * 바이트 기준 부분 문자열 추출 (VBA h_mid 수정판)
+ * @param {string} str - 원본 문자열
+ * @param {number} startByte - 시작 바이트 오프셋 (0-based)
+ * @param {number} byteLen  - 추출할 바이트 수
+ */
+function midBytes(str, startByte, byteLen) {
+  let pos = 0, result = '';
+  for (let i = 0; i < str.length; i++) {
+    const cw = str.charCodeAt(i) > 127 ? 2 : 1;
+    if (pos >= startByte && pos + cw <= startByte + byteLen) result += str[i];
+    else if (pos >= startByte + byteLen) break;
+    pos += cw;
+  }
+  return result;
+}
+
+/**
+ * 바이트 기준 오른쪽 공백 패딩 (VBA MergeSeg 버그 수정판)
+ * 수정 포인트: 조건도 lenBytes() 기준, Space 수 = targetBytes - lenBytes(s)
+ */
+function padBytes(s, targetBytes) {
+  const cur = lenBytes(s);
+  if (cur >= targetBytes) return midBytes(s, 0, targetBytes); // 초과 시 바이트 절단
+  return s + ' '.repeat(targetBytes - cur);
+}
+
+/* ── 상태 ── */
+let rows = [];
+let dragSrc = null;
+
+/* ── 렌더링 ── */
+function renderTable() {
+  const tb = document.getElementById('fieldTable');
+  tb.innerHTML = '';
+  rows.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    tr.draggable = true;
+
+    tr.addEventListener('dragstart', () => { dragSrc = i; tr.classList.add('dragging'); });
+    tr.addEventListener('dragend',   () => { tr.classList.remove('dragging'); document.querySelectorAll('tbody tr').forEach(t => t.classList.remove('drag-over')); });
+    tr.addEventListener('dragover',  e => { e.preventDefault(); tr.classList.add('drag-over'); });
+    tr.addEventListener('dragleave', () => tr.classList.remove('drag-over'));
+    tr.addEventListener('drop', e => {
+      e.preventDefault();
+      if (dragSrc !== null && dragSrc !== i) {
+        const moved = rows.splice(dragSrc, 1)[0];
+        rows.splice(i, 0, moved);
+        dragSrc = null;
+        renderTable(); updateStats();
+      }
+    });
+
+    const vBytes = lenBytes(r.val);
+    const tBytes = parseInt(r.len) || 0;
+    let lenClass = 'none', lenText = '—';
+    if (r.val !== '') {
+      lenText  = vBytes + 'B';
+      lenClass = vBytes === tBytes ? 'ok' : vBytes < tBytes ? 'warn' : 'err';
+    }
+
+    tr.innerHTML = `
+      <td class="td-num" title="드래그하여 순서 변경">${i + 1}</td>
+      <td><input value="${esc(r.engName)}" placeholder="FIELD_NAME" onchange="rows[${i}].engName=this.value"></td>
+      <td><input value="${esc(r.korName)}" placeholder="필드명" onchange="rows[${i}].korName=this.value"></td>
+      <td><input type="number" min="1" value="${r.len}" style="text-align:right" onchange="rows[${i}].len=parseInt(this.value)||1;renderTable();updateStats()"></td>
+      <td><input value="${esc(r.val)}" placeholder="—" onchange="rows[${i}].val=this.value;renderTable();updateStats()"></td>
+      <td class="td-len ${lenClass}" title="${vBytes}B / ${tBytes}B">${lenText}</td>
+      <td><button class="del-btn" onclick="deleteRow(${i})">✕</button></td>`;
+    tb.appendChild(tr);
+  });
+  updateStats();
+}
+
+function esc(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+}
+
+/* ── 통계 ── */
+function updateStats() {
+  const defTotal = rows.reduce((s, r) => s + (parseInt(r.len) || 0), 0);
+  const msgBytes = lenBytes(document.getElementById('inputMsg').value);
+  document.getElementById('statDef').textContent = defTotal + ' B';
+  document.getElementById('statMsg').textContent = msgBytes + ' B';
+
+  const chk = document.getElementById('statChk');
+  chk.className = 'val';
+  if (!rows.length)       { chk.textContent = '—'; return; }
+  if (!msgBytes)          { chk.textContent = '대기'; return; }
+  if (defTotal === msgBytes) { chk.textContent = '일치 ✓'; chk.classList.add('ok'); }
+  else { const d = msgBytes - defTotal; chk.textContent = (d > 0 ? '+' : '') + d + 'B'; chk.classList.add('warn'); }
+}
+
+/* ── 행 조작 ── */
+function addRow()    { rows.push({ engName:'', korName:'', len:10, val:'' }); renderTable(); }
+function deleteRow(i){ rows.splice(i, 1); renderTable(); }
+function clearRows() { if (rows.length && !confirm('모든 필드를 삭제하시겠습니까?')) return; rows = []; renderTable(); }
+
+function loadSample() {
+  rows = [
+    { engName:'TRAN_CD',  korName:'거래구분코드', len:4,  val:'' },
+    { engName:'BANK_CD',  korName:'은행코드',     len:3,  val:'' },
+    { engName:'ACCT_NO',  korName:'계좌번호',     len:20, val:'' },
+    { engName:'AMT',      korName:'거래금액',     len:15, val:'' },
+    { engName:'TRAN_DT',  korName:'거래일자',     len:8,  val:'' },
+    { engName:'TRAN_TM',  korName:'거래시각',     len:6,  val:'' },
+    { engName:'REMARK',   korName:'비고',         len:40, val:'' },
+  ];
+  renderTable();
+  setStatus('샘플 7개 필드 로드 완료 (총 96B)', 'ok');
+}
+
+/* ── 핵심 로직 ── */
+
+/** 전문분석: 입력 전문 → 각 필드 val 채우기 */
+function splitSeg() {
+  const msg = document.getElementById('inputMsg').value;
+  if (!msg.trim())   { setStatus('분석할 전문을 입력하세요.', 'err'); return; }
+  if (!rows.length)  { setStatus('필드 정의를 먼저 입력하세요.', 'err'); return; }
+
+  let cursor = 0;
+  rows.forEach(r => {
+    r.val   = midBytes(msg, cursor, r.len);
+    cursor += parseInt(r.len) || 0;
+  });
+  renderTable();
+
+  const total    = rows.reduce((s, r) => s + (parseInt(r.len) || 0), 0);
+  const msgBytes = lenBytes(msg);
+  if (total !== msgBytes)
+    setStatus(`전문분석 완료 — 정의 ${total}B / 전문 ${msgBytes}B (차이: ${msgBytes - total}B)`, 'warn');
+  else
+    setStatus(`전문분석 완료 — ${total}B, 필드 ${rows.length}개`, 'ok');
+}
+
+/**
+ * 전문합치기: 각 필드 val → 조립전문
+ * [버그수정] padBytes() 내부에서 lenBytes() 기준으로 패딩 계산
+ */
+function mergeSeg() {
+  if (!rows.length) { setStatus('필드 정의를 먼저 입력하세요.', 'err'); return; }
+
+  let result = '';
+  rows.forEach(r => {
+    const targetBytes = parseInt(r.len) || 0;
+    result += padBytes(r.val || '', targetBytes);
+  });
+
+  document.getElementById('outputMsg').value = result;
+  setStatus(`전문합치기 완료 — 총 ${lenBytes(result)}B, 필드 ${rows.length}개`, 'ok');
+  updateStats();
+}
+
+/* ── 출력 유틸 ── */
+function copyOutput() {
+  const v = document.getElementById('outputMsg').value;
+  if (!v) { setStatus('복사할 내용이 없습니다.', 'warn'); return; }
+  navigator.clipboard.writeText(v).then(() => setStatus('클립보드에 복사되었습니다.', 'ok'));
+}
+
+function clearOutput() {
+  document.getElementById('outputMsg').value = '';
+}
+
+function setStatus(msg, type) {
+  const el = document.getElementById('statusBar');
+  el.textContent = msg;
+  el.className = 'status-bar show ' + type;
+}
+
+/* ── CSV 내보내기 ── */
+function exportCSV() {
+  if (!rows.length) { setStatus('내보낼 데이터가 없습니다.', 'warn'); return; }
+  const header = '영문명,한글명,길이(bytes),전문내용';
+  const lines  = rows.map(r =>
+    [r.engName, r.korName, r.len, r.val].map(v => `"${(v||'').replace(/"/g,'""')}"`).join(',')
+  );
+  const csv  = [header, ...lines].join('\r\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'kftc_fields.csv'; a.click();
+  URL.revokeObjectURL(url);
+  setStatus('CSV 내보내기 완료', 'ok');
+}
+
+/* ── 초기화 ── */
+document.getElementById('inputMsg').addEventListener('input', updateStats);
+renderTable();
+updateStats();
+</script>
+</body>
+</html>
