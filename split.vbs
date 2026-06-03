@@ -1,301 +1,305 @@
 Option Explicit
 
-' ============================================================
-' [상수 정의 영역]
-' ============================================================
-Private Const HEADER_ROW      As Long = 1    ' 헤더 행
-Private Const DATA_START_ROW  As Long = 2    ' 데이터 시작 행
-Private Const BUTTON_WIDTH    As Single = 80 ' 버튼 너비
-Private Const BUTTON_HEIGHT   As Single = 25 ' 버튼 높이
+'=============================================================================
+' [마스터 매크로] 전문분석기 시트 자동 생성 및 UI 디자인 세팅
+'=============================================================================
+Public Sub Create_Parser_Sheet()
+    Dim wb As Workbook
+    Dim ws As Worksheet
+    Dim btnArea As Range
+    
+    Set wb = ThisWorkbook
+    
+    ' 1. 기존에 '전문분석기' 시트가 있다면 경고 후 초기화 혹은 새로 생성
+    On Error Resume Next
+    Application.DisplayAlerts = False
+    wb.Sheets("전문분석기").Delete
+    Application.DisplayAlerts = True
+    On Error GoTo 0
+    
+    Set ws = wb.Sheets.Add(Before:=wb.Sheets(1))
+    ws.Name = "전문분석기"
+    
+    ' 화면 그리드 라인 활성화
+    ActiveWindow.DisplayGridlines = True
+    
+    ' 2. 상단 마스터 입력/출력 영역 디자인 (B2, B3 정밀 세팅)
+    With ws
+        ' 행 높이 설정
+        .Rows("1:3").RowHeight = 26
+        .Rows("4").RowHeight = 24
+        
+        ' 타이틀 및 가이드 라벨 레이아웃
+        .Range("A2").Value = "최종 전문 결과 (B2)"
+        .Range("A3").Value = "원본 전문 소스 (B3)"
+        .Range("A2:A3").Font.Bold = True
+        .Range("A2:A3").HorizontalAlignment = xlCenter
+        .Range("A2:A3").Interior.Color = RGB(240, 242, 245)
+        
+        ' 핵심 데이터 셀 서식 및 테두리 (텍스트 서식 @ 지정으로 숫자 잘림 방지)
+        With .Range("B2:F2")
+            .Merge
+            .NumberFormat = "@"
+            .Interior.Color = RGB(255, 251, 230) ' 결과창: 연한 노란색
+        End With
+        
+        With .Range("B3:F3")
+            .Merge
+            .NumberFormat = "@"
+            .Interior.Color = RGB(240, 248, 255) ' 소스창: 연한 파란색
+        End With
+        
+        ' 테두리 일괄 적용
+        .Range("A2:F3").Borders.LineStyle = xlContinuous
+        .Range("A2:F3").Borders.Color = RGB(180, 180, 180)
+        
+        ' 3. 하단 데이터 정의 테이블 헤더 생성 (4행)
+        .Range("A4").Value = "순번"
+        .Range("B4").Value = "필드명"
+        .Range("C4").Value = "길이(Byte)"
+        .Range("D4").Value = "데이터 결과 값"
+        
+        With .Range("A4:D4")
+            .Font.Bold = True
+            .Font.Color = RGB(255, 255, 255)
+            .Interior.Color = RGB(68, 114, 196) ' 신뢰감을 주는 비즈니스 블루
+            .HorizontalAlignment = xlCenter
+            .Borders.LineStyle = xlContinuous
+        End With
+        
+        ' 4. 실무 가이드용 데이터 샘플 3줄 기본 제공
+        .Range("A5:D5").Value = Array(1, "은행코드", 3, "")
+        .Range("A6:D6").Value = Array(2, "고객성명", 10, "")
+        .Range("A7:D7").Value = Array(3, "거래금액", 12, "")
+        .Range("D5:D7").NumberFormat = "@"
+        .Range("A5:D7").Borders.LineStyle = xlContinuous
+        .Range("A5:A7").HorizontalAlignment = xlCenter
+        .Range("C5:C7").HorizontalAlignment = xlCenter
+        
+        ' 열 너비 최적화 기본값
+        .Columns("A").ColumnWidth = 8
+        .Columns("B").ColumnWidth = 20
+        .Columns("C").ColumnWidth = 12
+        .Columns("D").ColumnWidth = 40
+        .Columns("E").ColumnWidth = 5
+        .Columns("F").ColumnWidth = 5
+    End With
+    
+    ' 5. 실무용 원클릭 매크로 버튼(도형) 자동 생성 및 링크 설정
+    ' 위치 지정용 가이드셀 지정 (G열에 나란히 배치)
+    CreateVBAButton ws, "H2", "BTN_전문분석", "전문 분석", RGB(46, 117, 182)
+    CreateVBAButton ws, "H3", "BTN_전문합치기", "전문 합치기", RGB(112, 173, 71)
+    CreateVBAButton ws, "H4", "BTN_초기화", "데이터 초기화", RGB(165, 165, 165)
+    CreateVBAButton ws, "H5", "BTN_전문복사", "결과 복사", RGB(255, 192, 0)
+    
+    MsgBox "'전문분석기' 워크시트와 매크로 버튼이 완벽하게 자동 구축되었습니다!", vbInformation, "구축 완료"
+End Sub
 
-' 컬럼 정의 (매직넘버 제거)
-Private Const COL_ENG_NAME  As Long = 1  ' A열: 영문명
-Private Const COL_KOR_NAME  As Long = 2  ' B열: 한글명
-Private Const COL_BYTE_LEN  As Long = 3  ' C열: 길이(Byte)
-Private Const COL_DATA      As Long = 4  ' D열: 데이터
-Private Const COL_RESULT    As Long = 5  ' E열: 전문 입출력
-
-' E열 내 역할 정의
-Private Const ROW_LABEL     As Long = 1  ' E1: 라벨
-Private Const ROW_INPUT     As Long = 2  ' E2: 전문 입력 (분석용)
-Private Const ROW_OUTPUT    As Long = 3  ' E3: 전문 출력 (조립 결과)
-
-' ============================================================
-' [유틸] 문자열의 바이트 길이를 반환
-' - 한글/영문 혼합 시 정확한 길이 계산
-' ============================================================
-Public Function LenMbcs(ByVal s As String) As Long
-    LenMbcs = LenB(StrConv(s, vbFromUnicode))
-End Function
-
-' ============================================================
-' [유틸] 바이트 기준 문자열 자르기
-' - startByte : 시작 위치 (1부터 시작)
-' - byteLen   : 자를 바이트 길이
-' - 내부적으로 문자열 → 바이트 변환 후 처리
-' ============================================================
-Public Function MidMbcs(ByVal s As String, _
-                       ByVal startByte As Long, _
-                       ByVal byteLen As Long) As String
-
-    Dim byteStr As String
-
-    ' 유니코드 문자열을 바이트 문자열로 변환
-    byteStr = StrConv(s, vbFromUnicode)
-
-    ' 시작 위치가 전체 길이를 초과하면 빈 문자열 반환
-    If startByte > LenB(byteStr) Then
-        MidMbcs = ""
-        Exit Function
-    End If
-
-    ' MidB로 바이트 단위 추출 후 다시 문자열로 변환
-    MidMbcs = StrConv(MidB(byteStr, startByte, byteLen), vbUnicode)
-
-End Function
-
-' ============================================================
-' [유틸] 바이트 기준 오른쪽 패딩
-' - totalLen에 맞게 공백(Space) 채움
-' - 초과 시 바이트 기준으로 자름
-' ============================================================
-Public Function PadRightMbcs(ByVal s As String, ByVal totalLen As Long) As String
-
-    Dim curLen As Long
-    curLen = LenMbcs(s)
-
-    ' 현재 길이가 더 크면 잘라냄
-    If curLen > totalLen Then
-        PadRightMbcs = MidMbcs(s, 1, totalLen)
-    Else
-        ' 부족하면 공백으로 채움
-        PadRightMbcs = s & Space(totalLen - curLen)
-    End If
-
-End Function
-
-' ============================================================
-' [유틸] 테두리 적용
-' ============================================================
-Private Sub SetBorders(rng As Range)
-    With rng.Borders
-        .LineStyle = xlContinuous
-        .Weight = xlThin
+' [서브 함수] UI 버튼(도형)을 생성하는 내부 로직
+Private Sub CreateVBAButton(ws As Worksheet, cellAddr As String, macroName As String, btnText As String, bgColor As Long)
+    Dim targetCell As Range
+    Dim btnShape As Shape
+    
+    Set targetCell = ws.Range(cellAddr)
+    
+    ' 셀 위치에 맞춰 사각형 도형 생성
+    Set btnShape = ws.Shapes.AddShape(msoShapeRoundedRectangle, targetCell.Left + 2, targetCell.Top + 2, 100, 22)
+    
+    With btnShape
+        .TextFrame.Characters.Text = btnText
+        .TextFrame.Characters.Font.Size = 9
+        .TextFrame.Characters.Font.Bold = True
+        .TextFrame.Characters.Font.Color = RGB(255, 255, 255)
+        .TextFrame.HorizontalAlignment = xlHAlignCenter
+        .TextFrame.VerticalAlignment = xlVAlignCenter
+        .Fill.Solid
+        .Fill.ForeColor.RGB = bgColor
+        .Line.Visible = msoFalse
+        .OnAction = macroName ' 클릭 시 구동할 매크로 연결
     End With
 End Sub
 
-' ============================================================
-' [유틸] 마지막 데이터 행 찾기 (C열 기준)
-' ============================================================
-Private Function GetLastDataRow(ws As Worksheet) As Long
-    GetLastDataRow = ws.Cells(ws.Rows.Count, COL_BYTE_LEN).End(xlUp).Row
-End Function
 
-' ============================================================
-' [유틸] 전체 정의된 바이트 길이 합계 계산
-' ============================================================
-Private Function GetTotalDefinedBytes(ws As Worksheet) As Long
-
-    Dim r As Long
-    Dim total As Long
-
-    For r = DATA_START_ROW To GetLastDataRow(ws)
-        If IsNumeric(ws.Cells(r, COL_BYTE_LEN).Value) Then
-            total = total + CLng(ws.Cells(r, COL_BYTE_LEN).Value)
-        End If
-    Next r
-
-    GetTotalDefinedBytes = total
-
-End Function
-
-' ============================================================
-' [메인] 샘플 데이터 생성
-' - 테스트용 필드 정의 자동 생성
-' ============================================================
-Public Sub CreateSampleData()
-
-    Dim ws As Worksheet
-    Set ws = ActiveSheet
-
-    ' 기존 데이터 초기화
-    ws.Cells.Clear
-
-    ' 헤더 생성
-    ws.Cells(1, 1).Value = "영문명"
-    ws.Cells(1, 2).Value = "한글명"
-    ws.Cells(1, 3).Value = "길이(Byte)"
-    ws.Cells(1, 4).Value = "데이터 내용"
-
-    ' 헤더 스타일
-    With ws.Range("A1:D1")
-        .Interior.Color = RGB(220, 230, 241)
-        .Font.Bold = True
-    End With
-
-    ' 샘플 데이터 (금융 전문 구조 예시)
-    Dim sampleData As Variant
-    sampleData = Array( _
-        Array("FLD_001", "거래구분", 4, "1001"), _
-        Array("FLD_002", "기관코드", 6, "000001"), _
-        Array("FLD_003", "계좌번호", 20, "12345678901234567890"), _
-        Array("FLD_004", "고객명", 20, "홍길동"), _
-        Array("FLD_005", "거래금액", 15, "1000000") _
-    )
-
+'=============================================================================
+' [공통 엔진] 한글 바이트 대응 문자열 추출 (환경 오류 예방 표준 버전)
+'=============================================================================
+Public Function MidB_Fix(ByVal strInput As String, ByVal startByte As Long, ByVal lengthByte As Long) As String
+    Dim arrByte() As Byte
+    Dim arrSub() As Byte
     Dim i As Long
-    For i = 0 To UBound(sampleData)
-        ws.Cells(DATA_START_ROW + i, COL_ENG_NAME).Value = sampleData(i)(0)
-        ws.Cells(DATA_START_ROW + i, COL_KOR_NAME).Value = sampleData(i)(1)
-        ws.Cells(DATA_START_ROW + i, COL_BYTE_LEN).Value = sampleData(i)(2)
-        ws.Cells(DATA_START_ROW + i, COL_DATA).Value = sampleData(i)(3)
-        ws.Cells(DATA_START_ROW + i, COL_DATA).NumberFormat = "@"
+    Dim maxIdx As Long
+    
+    If strInput = "" Or lengthByte <= 0 Then MidB_Fix = "": Exit Function
+    
+    arrByte = StrConv(strInput, vbFromUnicode)
+    maxIdx = UBound(arrByte)
+    
+    If (startByte - 1) > maxIdx Then MidB_Fix = "": Exit Function
+    If (startByte - 1 + lengthByte) > (maxIdx + 1) Then lengthByte = (maxIdx + 1) - (startByte - 1)
+    
+    ReDim arrSub(lengthByte - 1)
+    For i = 0 To lengthByte - 1
+        arrSub(i) = arrByte(startByte - 1 + i)
     Next i
+    
+    MidB_Fix = StrConv(arrSub, vbUnicode)
+End Function
 
-    ' 입력/출력 영역 설정
-    ws.Cells(ROW_LABEL, COL_RESULT).Value = "전문 입출력"
-    ws.Cells(ROW_INPUT, COL_RESULT).Interior.Color = RGB(255, 228, 235)
-    ws.Cells(ROW_OUTPUT, COL_RESULT).Interior.Color = RGB(255, 250, 205)
+'=============================================================================
+' [공통 엔진] 한글 바이트 대응 패딩(우측 공백 채우기) 처리
+'=============================================================================
+Public Function PadRightB(ByVal strInput As String, ByVal totalByte As Long) As String
+    Dim arrByte() As Byte
+    Dim currentByteLen As Long
+    
+    arrByte = StrConv(strInput, vbFromUnicode)
+    currentByteLen = UBound(arrByte) + 1
+    
+    If currentByteLen >= totalByte Then
+        PadRightB = MidB_Fix(strInput, 1, totalByte)
+    Else
+        PadRightB = strInput & Space$(totalByte - currentByteLen)
+    End If
+End Function
 
-    ' 테두리 적용
-    SetBorders ws.Range("A1:D6")
-    SetBorders ws.Range("E1:E3")
 
-    ' 버튼 생성
-    CreateButton ws, "전문분석기", "SplitSeg", 1, 6
-    CreateButton ws, "전문합치기", "MergeSeg", 2, 6
-
-    ws.Columns("A:G").AutoFit
-
-    MsgBox "샘플 데이터 생성 완료"
-
-End Sub
-
-' ============================================================
-' [유틸] 버튼 생성 (중복 제거 포함)
-' ============================================================
-Private Sub CreateButton(ws As Worksheet, _
-                         btnText As String, _
-                         macroName As String, _
-                         topRow As Long, _
-                         leftCol As Long)
-
-    Dim btn As Button
-
-    ' 기존 동일 버튼 제거
-    For Each btn In ws.Buttons
-        If btn.Caption = btnText Then btn.Delete
-    Next btn
-
-    Dim c As Range
-    Set c = ws.Cells(topRow, leftCol)
-
-    Set btn = ws.Buttons.Add(c.Left, c.Top, BUTTON_WIDTH, BUTTON_HEIGHT)
-
-    With btn
-        .Caption = btnText
-        .OnAction = macroName
-    End With
-
-End Sub
-
-' ============================================================
-' [기능] 전문 분석
-' - E2 전체 전문 → D열 필드별 분해
-' ============================================================
-Public Sub SplitSeg()
-
-    On Error GoTo ErrHandler
-
+'=============================================================================
+' 기능 1. 전문 분석 (Parser) - [B3 셀 소스 ?? D열 결과 파싱]
+'=============================================================================
+Public Sub BTN_전문분석()
     Dim ws As Worksheet
-    Set ws = ActiveSheet
-
-    Dim fullStr As String
-    fullStr = ws.Cells(ROW_INPUT, COL_RESULT).Value
-
-    ' 입력값 검증
-    If Len(Trim(fullStr)) = 0 Then
-        MsgBox "E2에 전문을 입력하세요.", vbExclamation
+    Dim msg As String
+    Dim i As Long
+    Dim offset As Long
+    Dim lastRow As Long
+    Dim fieldLen As Long
+    
+    Set ws = ThisWorkbook.Sheets("전문분석기")
+    msg = CStr(ws.Range("B3").MergeArea.Cells(1, 1).Value)
+    
+    If Trim$(msg) = "" Then
+        MsgBox "B3 셀에 분석할 원본 전문 데이터가 없습니다.", vbExclamation, "알림"
         Exit Sub
     End If
-
-    Dim lastRow As Long
-    lastRow = GetLastDataRow(ws)
-
-    Dim startByte As Long
-    startByte = 1
-
-    Dim r As Long
-    For r = DATA_START_ROW To lastRow
-
-        Dim segLen As Long
-        segLen = CLng(ws.Cells(r, COL_BYTE_LEN).Value)
-
-        ' 바이트 기준 분해
-        ws.Cells(r, COL_DATA).Value = MidMbcs(fullStr, startByte, segLen)
-
-        startByte = startByte + segLen
-
-    Next r
-
-    MsgBox "전문 분석 완료"
-    Exit Sub
-
-ErrHandler:
-    MsgBox "오류: " & Err.Description
-
-End Sub
-
-' ============================================================
-' [기능] 전문 조립
-' - D열 필드 → E3 전체 전문 생성
-' ============================================================
-Public Sub MergeSeg()
-
-    On Error GoTo ErrHandler
-
-    Dim ws As Worksheet
-    Set ws = ActiveSheet
-
-    Dim lastRow As Long
-    lastRow = GetLastDataRow(ws)
-
-    Dim resultMsg As String
-    Dim warnings As String
-
-    Dim r As Long
-    For r = DATA_START_ROW To lastRow
-
-        Dim segLen As Long
-        segLen = CLng(ws.Cells(r, COL_BYTE_LEN).Value)
-
-        Dim val As String
-        val = CStr(ws.Cells(r, COL_DATA).Value)
-
-        ' 길이 초과 체크
-        If LenMbcs(val) > segLen Then
-            warnings = warnings & "행 " & r & " 초과 → 잘림" & vbCrLf
+    
+    lastRow = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
+    If lastRow < 5 Then Exit Sub
+    
+    offset = 1
+    
+    Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual
+    
+    For i = 5 To lastRow
+        If IsNumeric(ws.Cells(i, 3).Value) Then
+            fieldLen = CLng(ws.Cells(i, 3).Value)
+        Else
+            fieldLen = 0
         End If
-
-        ' 바이트 기준 패딩 후 결합
-        resultMsg = resultMsg & PadRightMbcs(val, segLen)
-
-    Next r
-
-    ws.Cells(ROW_OUTPUT, COL_RESULT).Value = resultMsg
-
-    Dim msg As String
-    msg = "전문 조립 완료 (" & LenMbcs(resultMsg) & " byte)"
-
-    If warnings <> "" Then
-        msg = msg & vbCrLf & vbCrLf & "※ 길이 초과 필드:" & vbCrLf & warnings
-    End If
-
-    MsgBox msg
-
-    Exit Sub
-
-ErrHandler:
-    MsgBox "오류: " & Err.Description
-
+        
+        If fieldLen > 0 Then
+            ws.Cells(i, 4).NumberFormat = "@"
+            ws.Cells(i, 4).Value = MidB_Fix(msg, offset, fieldLen)
+            offset = offset + fieldLen
+        Else
+            ws.Cells(i, 4).Value = ""
+        End If
+    Next i
+    
+    Application.Calculation = xlCalculationAutomatic
+    Application.ScreenUpdating = True
+    
+    MsgBox "전문분석이 정상 완료되었습니다!", vbInformation, "성공"
 End Sub
+
+
+'=============================================================================
+' 기능 2. 전문 합치기 (Builder) - [D열 소스 ?? B2 셀 결과 출력]
+'=============================================================================
+Public Sub BTN_전문합치기()
+    Dim ws As Worksheet
+    Dim lastRow As Long
+    Dim i As Long
+    Dim fieldLen As Long
+    Dim fieldData As String
+    Dim resultMsg As String
+    
+    Set ws = ThisWorkbook.Sheets("전문분석기")
+    lastRow = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
+    If lastRow < 5 Then Exit Sub
+    
+    Application.ScreenUpdating = False
+    resultMsg = ""
+    
+    For i = 5 To lastRow
+        If IsNumeric(ws.Cells(i, 3).Value) Then
+            fieldLen = CLng(ws.Cells(i, 3).Value)
+        Else
+            fieldLen = 0
+        End If
+        
+        If fieldLen > 0 Then
+            fieldData = CStr(ws.Cells(i, 4).Value)
+            resultMsg = resultMsg & PadRightB(fieldData, fieldLen)
+        End If
+    Next i
+    
+    ws.Range("B2").MergeArea.Cells(1, 1).NumberFormat = "@"
+    ws.Range("B2").MergeArea.Cells(1, 1).Value = resultMsg
+    
+    Application.ScreenUpdating = True
+    
+    MsgBox "전문합치기가 완료되어 B2 셀에 반영되었습니다.", vbInformation, "성공"
+End Sub
+
+
+'=============================================================================
+' 기능 3. 데이터 초기화 (병합 오류 완전 차단)
+'=============================================================================
+Public Sub BTN_초기화()
+    Dim ws As Worksheet
+    Dim lastRow As Long
+    
+    Set ws = ThisWorkbook.Sheets("전문분석기")
+    lastRow = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
+    
+    Application.ScreenUpdating = False
+    
+    If lastRow >= 5 Then
+        ws.Range("D5:D" & lastRow).ClearContents
+    End If
+    
+    ' 병합 셀 구조를 안전하게 유지하며 값만 소거 (.Value = "")
+    ws.Range("B2").MergeArea.Cells(1, 1).Value = ""
+    ws.Range("B3").MergeArea.Cells(1, 1).Value = ""
+    
+    Application.ScreenUpdating = True
+    MsgBox "초기화가 완료되었습니다.", vbInformation, "초기화 완료"
+End Sub
+
+
+'=============================================================================
+' 기능 4. 클립보드 복사 (백그라운드 복사)
+'=============================================================================
+Public Sub BTN_전문복사()
+    Dim ws As Worksheet
+    Dim objData As Object
+    Dim targetValue As String
+    
+    Set ws = ThisWorkbook.Sheets("전문분석기")
+    targetValue = CStr(ws.Range("B2").MergeArea.Cells(1, 1).Value)
+    
+    If Trim$(targetValue) = "" Then
+        MsgBox "복사할 전문 결과물이 B2 셀에 존재하지 않습니다.", vbExclamation, "알림"
+        Exit Sub
+    End If
+    
+    On Error Resume Next
+    Set objData = CreateObject("New:{1C3B4210-F441-11CE-B9EA-00AA006B1A69}")
+    objData.SetText targetValue
+    objData.PutInClipboard
+    On Error GoTo 0
+    
+    MsgBox "최종 조립 전문이 클립보드에 복사되었습니다. (Ctrl+V 가능)", vbInformation, "복사 완료"
+End Sub
+
